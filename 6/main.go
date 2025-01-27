@@ -3,89 +3,110 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"math"
 	"os"
 	"sort"
 )
 
-type Server struct {
-	th  int
-	ind int
+type Data struct {
+	time int
+	wtI  int
+	thI  int
 }
 
-func check(throughputs []Server, weights, ans []int, mt int) (int, bool) {
-	res := 0
-	for j, weight := range weights {
-		curtime := -1
-		for i := 0; i < len(throughputs); i++ {
-			time := int(math.Ceil(float64(weight)/float64(throughputs[i].th)))
-			if time <= mt {
-				curtime = time
-				ans[j] = throughputs[i].ind + 1
+type Datas []*Data
+
+func (s Datas) Len() int      { return len(s) }
+func (s Datas) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+
+type ByTime struct{ Datas }
+
+func (s ByTime) Less(i, j int) bool { return s.Datas[i].time < s.Datas[j].time }
+
+func twop(allt *Datas, ans *[]int, n int, exit bool, ans2 int) int {
+	an := int(2e9)
+	wcnt := make([]int, n) // the number of weight in window allt[left, right]
+	cnt := 0
+	left := 0
+	right := 0
+outerLoop:
+	for right < len(*allt) {
+		for cnt != n && right < len(*allt) {
+			dat := (*allt)[right]
+			(*ans)[dat.wtI] = dat.thI + 1
+			wcnt[dat.wtI] += 1
+			if wcnt[dat.wtI] == 1 {
+				cnt += 1
+			}
+			if cnt == n {
 				break
 			}
+			right += 1
 		}
-		fmt.Println(res, curtime, weight, mt)
-		if curtime == -1 {
-			return -1, false
+		for {
+			if cnt != n {
+				break
+			}
+			dat := (*allt)[left]
+			wcnt[dat.wtI] -= 1
+			if wcnt[dat.wtI] == 0 {
+				diff := (*allt)[right].time - (*allt)[left].time
+				if exit && diff == ans2 {
+					break outerLoop
+				}
+				an = min(an, diff)
+				cnt -= 1
+				left += 1
+				right += 1
+				break
+			}
+			left += 1
 		}
-		res = max(res, mt - curtime)
 	}
+	return an
+}
 
-	return res, true
+func solve(out *bufio.Writer, th, wt *[]int) {
+	var allt Datas
+	for wtI, w := range *wt {
+		for thI, v := range *th {
+			time := (w - 1) / v
+			allt = append(allt, &Data{time: time, wtI: wtI, thI: thI})
+		}
+	}
+	sort.Sort(ByTime{allt})
+	// fmt.Fprint(out, allt[0].time, allt[1].time, allt[2].time)
+	ans := make([]int, len(*wt)) // the server assigned to weight: ans[wtI] = thI
+	ans1 := twop(&allt, &ans, len(*wt), false, -1)
+	twop(&allt, &ans, len(*wt), true, ans1)
+	fmt.Fprintln(out, ans1)
+	for _, val := range ans {
+		fmt.Fprint(out, val, " ")
+	}
+	fmt.Fprintln(out)
 }
 
 func main() {
-	var in *bufio.Reader
-	var out *bufio.Writer
-	in = bufio.NewReader(os.Stdin)
-	out = bufio.NewWriter(os.Stdout)
+	in := bufio.NewReader(os.Stdin)
+	out := bufio.NewWriter(os.Stdout)
 	defer out.Flush()
 
 	var t int
 	fmt.Fscan(in, &t)
-
 	for inp := 0; inp < t; inp++ {
 		var n int
 		fmt.Fscan(in, &n)
-		throughputs := make([]Server, n)
+		th := make([]int, n)
 		for i := 0; i < n; i++ {
-			var throughput int
-			fmt.Fscan(in, &throughput)
-			throughputs[i] = Server{th: throughput, ind: i}
+			fmt.Fscan(in, &th[i])
 		}
-
-		// sort.Slice(throughputs, func(i, j int) bool {
-		// 	return throughputs[i].th < throughputs[j].th
-		// })
 
 		var m int
 		fmt.Fscan(in, &m)
-		weights := make([]int, m)
+		wt := make([]int, m)
 		for i := 0; i < m; i++ {
-			fmt.Fscan(in, &weights[i])
+			fmt.Fscan(in, &wt[i])
 		}
 
-		ans := make([]int, m)
-
-		left, right := 0, int(1e9)
-		for i := 0; i < 100; i++ {
-			mid := (left + right) / 2
-			if _, valid := check(throughputs, weights, ans, mid); valid {
-				right = mid
-			} else {
-				left = mid + 1
-			}
-		}
-
-		result, valid := check(throughputs, weights, ans, left)
-		if !valid {
-			result, _ = check(throughputs, weights, ans, right)
-		}
-		fmt.Fprintln(out, result)
-		for _, val := range ans {
-			fmt.Fprint(out, val, " ")
-		}
-		fmt.Fprintln(out)
+		solve(out, &th, &wt)
 	}
 }
